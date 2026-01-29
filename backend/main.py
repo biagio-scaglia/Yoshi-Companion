@@ -1,14 +1,14 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from llama_cpp import Llama
 import uvicorn
 import os
 import shutil
 from loguru import logger
-from backend.persona import get_yoshi_prompt
-from backend.brain import init_db, ingest_text, search
+from backend.agents.orchestrator import Orchestrator
+from backend.brain import init_db, ingest_text
 import psutil
+import glob
 from pypdf import PdfReader
 
 # Try importing Llama, handle failure gracefully
@@ -27,29 +27,42 @@ app = FastAPI(title="Yoshi Comfort Bot 🦕")
 # Model Path (adjust as needed)
 MODEL_PATH = "../models/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
 
-# Global Model Variable
+# Global Orchestrator
+orchestrator = None
 llm = None
 
 
 @app.on_event("startup")
 def startup_event():
-    global llm
-    logger.info("Waking up Yoshi... 🥚")
+    global llm, orchestrator
+    logger.info("Yoshi System Booting... 🥚")
     init_db()
 
+    # Ingest Static Knowledge
+    knowledge_files = glob.glob("backend/knowledge/*.md")
+    for kf in knowledge_files:
+        try:
+            with open(kf, "r", encoding="utf-8") as f:
+                content = f.read()
+                ingest_text(kf, content)
+                logger.info(f"Ingested knowledge: {kf}")
+        except Exception as e:
+            logger.error(f"Failed to ingest {kf}: {e}")
+
+    # Load LLM
     if HAS_LLAMA:
         if not os.path.exists(MODEL_PATH):
-            logger.error(f"Model not found at {MODEL_PATH}")
-            # Don't raise, just log to allow mock mode if user wants
-            logger.warning("Continuing without model...")
+            logger.warning(f"Model not found at {MODEL_PATH}. Mock mode enabled.")
         else:
             try:
                 llm = Llama(model_path=MODEL_PATH, n_ctx=2048, verbose=False)
-                logger.success("Yoshi is ready! 🦕")
+                logger.success("Llama Core Online! 🦕")
             except Exception as e:
                 logger.error(f"Failed to load Llama: {e}")
-    else:
-        logger.warning("Yoshi is running in MOCK MODE (No Llama).")
+
+    # Initialize Orchestrator
+    orchestrator = Orchestrator(llm)
+    logger.success("Orchestrator Ready! 🎶")
 
 
 class ChatRequest(BaseModel):
@@ -60,37 +73,9 @@ class ChatRequest(BaseModel):
 async def chat(request: ChatRequest):
     logger.info(f"User says: {request.message}")
 
-    # 1. Search Brain (RAG)
-    context = search(request.message)
-    if context:
-        logger.info("Yoshi found something in his brain! 🧠")
-
-    # 2. Build Prompt
-    prompt = get_yoshi_prompt(request.message, context)
-
-    # 3. Stream Response
-    def stream_response():
-        if llm:
-            stream = llm.create_completion(
-                prompt,
-                max_tokens=512,
-                stop=["<|user|>", "User:"],
-                stream=True,
-                temperature=0.7,
-            )
-            for output in stream:
-                token = output["choices"][0]["text"]
-                yield token
-        else:
-            # Mock Response
-            import time
-
-            mock_text = "Yoshi! I can't find my brain (llama-cpp-python), so I'm pretending! 🦕 Check the logs!"
-            for word in mock_text.split():
-                yield word + " "
-                time.sleep(0.1)
-
-    return StreamingResponse(stream_response(), media_type="text/plain")
+    return StreamingResponse(
+        orchestrator.process_stream(request.message), media_type="text/plain"
+    )
 
 
 @app.post("/ingest")

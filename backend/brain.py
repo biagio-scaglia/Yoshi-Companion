@@ -2,7 +2,7 @@ import duckdb
 import diskcache
 from loguru import logger
 from sentence_transformers import SentenceTransformer
-import os
+
 
 # Configuration
 CACHE_DIR = "./cache"
