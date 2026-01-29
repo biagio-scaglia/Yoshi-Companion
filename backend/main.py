@@ -12,8 +12,18 @@ import glob
 from pypdf import PdfReader
 
 
+from fastapi.middleware.cors import CORSMiddleware
+
 # Initialize App
 app = FastAPI(title="Yoshi Comfort Bot 🦕")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all for local dev (needed for Flutter/Android)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Model Path (adjust as needed)
 MODEL_PATH = "../models/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
