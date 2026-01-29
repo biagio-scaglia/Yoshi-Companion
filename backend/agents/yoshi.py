@@ -1,24 +1,20 @@
+import requests
+import json
 from backend.agents.base import Agent
 from backend.persona import get_yoshi_prompt
 
-
-try:
-    from llama_cpp import Llama
-
-    HAS_LLAMA = True
-except ImportError:
-    HAS_LLAMA = False
+OLLAMA_URL = "http://localhost:11434/api/generate"
+MODEL_NAME = "llama3.2"
 
 
 class YoshiAgent(Agent):
     """
-    The main conversational agent. Uses the LLM to generate
+    The main conversational agent. Uses Ollama (Llama 3.2) to generate
     comforting responses in Yoshi's persona.
     """
 
-    def __init__(self, llm_instance):
+    def __init__(self):
         super().__init__(name="Yoshi")
-        self.llm = llm_instance
 
     def process(self, input_text: str, context: dict = None) -> str:
         # 1. Retrieve context if provided (usually from Orchestrator passing RAG data)
@@ -38,21 +34,24 @@ class YoshiAgent(Agent):
         rag_content = context.get("rag_content", "") if context else ""
         prompt = get_yoshi_prompt(input_text, rag_content)
 
-        if self.llm:
-            stream = self.llm.create_completion(
-                prompt,
-                max_tokens=512,
-                stop=["<|user|>", "User:"],
-                stream=True,
-                temperature=0.7,
-            )
-            for output in stream:
-                yield output["choices"][0]["text"]
-        else:
-            # Mock
-            import time
+        payload = {
+            "model": MODEL_NAME,
+            "prompt": prompt,
+            "stream": True,
+            "options": {"temperature": 0.7, "stop": ["<|user|>", "User:"]},
+        }
 
-            mock_text = "Yoshi! No brain linked! *mlem* 🦕"
-            for word in mock_text.split():
-                yield word + " "
-                time.sleep(0.1)
+        try:
+            with requests.post(OLLAMA_URL, json=payload, stream=True) as response:
+                if response.status_code == 200:
+                    for line in response.iter_lines():
+                        if line:
+                            data = json.loads(line)
+                            token = data.get("response", "")
+                            yield token
+                            if data.get("done", False):
+                                break
+                else:
+                    yield f"Yoshi is confused... (Ollama Error: {response.status_code}) 😵"
+        except Exception as e:
+            yield f"Yoshi can't reach his brain! (Connection Error) 🦕\n{e}"

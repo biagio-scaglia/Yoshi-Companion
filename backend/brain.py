@@ -23,11 +23,14 @@ def init_db():
     con.execute("INSTALL vss; LOAD vss;")  # Vector Search Extension
     con.execute("INSTALL json; LOAD json;")
 
+    # Create Sequence if not exists
+    con.execute("CREATE SEQUENCE IF NOT EXISTS doc_id_seq;")
+
     # Create table for documents if not exists
     # We store: id, filename, content, embedding (VECTOR(384))
     con.execute("""
         CREATE TABLE IF NOT EXISTS documents (
-            id SEQUENCE,
+            id INTEGER PRIMARY KEY DEFAULT nextval('doc_id_seq'),
             filename VARCHAR,
             content VARCHAR,
             embedding FLOAT[384]

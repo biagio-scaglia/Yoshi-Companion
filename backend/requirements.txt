@@ -1,6 +1,5 @@
 fastapi
 uvicorn[standard]
-llama-cpp-python
 duckdb
 diskcache
 loguru
@@ -8,3 +7,4 @@ psutil
 pypdf
 python-multipart
 sentence-transformers
+requests

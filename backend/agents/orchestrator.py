@@ -10,10 +10,16 @@ class Orchestrator(Agent):
     - Factual/Knowledge -> LibrarianAgent -> YoshiAgent (Synthesized)
     """
 
-    def __init__(self, llm_instance):
+    def __init__(self):
         super().__init__(name="Orchestrator")
-        self.yoshi = YoshiAgent(llm_instance)
+        self.yoshi = YoshiAgent()
         self.librarian = LibrarianAgent()
+
+    def process(self, input_text: str, context: dict = None) -> str:
+        """
+        Synchronous wrapper around process_stream for ABC compliance.
+        """
+        return "".join(list(self.process_stream(input_text)))
 
     def process_stream(self, input_text: str):
         """

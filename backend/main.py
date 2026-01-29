@@ -11,15 +11,6 @@ import psutil
 import glob
 from pypdf import PdfReader
 
-# Try importing Llama, handle failure gracefully
-try:
-    from llama_cpp import Llama
-
-    HAS_LLAMA = True
-except ImportError:
-    logger.warning("llama-cpp-python not installed! Running in Mock/Ollama mode.")
-    HAS_LLAMA = False
-
 
 # Initialize App
 app = FastAPI(title="Yoshi Comfort Bot 🦕")
@@ -29,12 +20,11 @@ MODEL_PATH = "../models/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
 
 # Global Orchestrator
 orchestrator = None
-llm = None
 
 
 @app.on_event("startup")
 def startup_event():
-    global llm, orchestrator
+    global orchestrator
     logger.info("Yoshi System Booting... 🥚")
     init_db()
 
@@ -49,20 +39,10 @@ def startup_event():
         except Exception as e:
             logger.error(f"Failed to ingest {kf}: {e}")
 
-    # Load LLM
-    if HAS_LLAMA:
-        if not os.path.exists(MODEL_PATH):
-            logger.warning(f"Model not found at {MODEL_PATH}. Mock mode enabled.")
-        else:
-            try:
-                llm = Llama(model_path=MODEL_PATH, n_ctx=2048, verbose=False)
-                logger.success("Llama Core Online! 🦕")
-            except Exception as e:
-                logger.error(f"Failed to load Llama: {e}")
-
     # Initialize Orchestrator
-    orchestrator = Orchestrator(llm)
-    logger.success("Orchestrator Ready! 🎶")
+    # Now using Ollama internally
+    orchestrator = Orchestrator()
+    logger.success("Orchestrator Ready (Connected to Ollama)! 🎶")
 
 
 class ChatRequest(BaseModel):
