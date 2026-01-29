@@ -11,6 +11,16 @@ from backend.brain import init_db, ingest_text, search
 import psutil
 from pypdf import PdfReader
 
+# Try importing Llama, handle failure gracefully
+try:
+    from llama_cpp import Llama
+
+    HAS_LLAMA = True
+except ImportError:
+    logger.warning("llama-cpp-python not installed! Running in Mock/Ollama mode.")
+    HAS_LLAMA = False
+
+
 # Initialize App
 app = FastAPI(title="Yoshi Comfort Bot 🦕")
 
@@ -27,14 +37,19 @@ def startup_event():
     logger.info("Waking up Yoshi... 🥚")
     init_db()
 
-    if not os.path.exists(MODEL_PATH):
-        logger.error(f"Model not found at {MODEL_PATH}")
-        raise FileNotFoundError(f"Model not found at {MODEL_PATH}")
-
-    # Load Llama (offload layers to GPU if possible use n_gpu_layers=-1)
-    # Using n_ctx=2048 for context window
-    llm = Llama(model_path=MODEL_PATH, n_ctx=2048, verbose=False)
-    logger.success("Yoshi is ready! 🦕")
+    if HAS_LLAMA:
+        if not os.path.exists(MODEL_PATH):
+            logger.error(f"Model not found at {MODEL_PATH}")
+            # Don't raise, just log to allow mock mode if user wants
+            logger.warning("Continuing without model...")
+        else:
+            try:
+                llm = Llama(model_path=MODEL_PATH, n_ctx=2048, verbose=False)
+                logger.success("Yoshi is ready! 🦕")
+            except Exception as e:
+                logger.error(f"Failed to load Llama: {e}")
+    else:
+        logger.warning("Yoshi is running in MOCK MODE (No Llama).")
 
 
 class ChatRequest(BaseModel):
@@ -55,16 +70,25 @@ async def chat(request: ChatRequest):
 
     # 3. Stream Response
     def stream_response():
-        stream = llm.create_completion(
-            prompt,
-            max_tokens=512,
-            stop=["<|user|>", "User:"],
-            stream=True,
-            temperature=0.7,
-        )
-        for output in stream:
-            token = output["choices"][0]["text"]
-            yield token
+        if llm:
+            stream = llm.create_completion(
+                prompt,
+                max_tokens=512,
+                stop=["<|user|>", "User:"],
+                stream=True,
+                temperature=0.7,
+            )
+            for output in stream:
+                token = output["choices"][0]["text"]
+                yield token
+        else:
+            # Mock Response
+            import time
+
+            mock_text = "Yoshi! I can't find my brain (llama-cpp-python), so I'm pretending! 🦕 Check the logs!"
+            for word in mock_text.split():
+                yield word + " "
+                time.sleep(0.1)
 
     return StreamingResponse(stream_response(), media_type="text/plain")
 
